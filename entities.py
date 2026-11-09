@@ -267,3 +267,20 @@ class Drone:
             target_car.x, target_car.y = self.x, self.y
             if distance < 30 or self.x < -240 or self.x > SCREEN_WIDTH + 240:
                 self.done = True
+
+
+class Puddle:
+    def __init__(self, x, y, radius=24, color=BLOOD, highlight_color=BLOOD_HIGHLIGHT):
+        self.x, self.y, self.radius = x, y, radius
+        self.color, self.highlight_color = color, highlight_color
+        self.life = 10.0
+        # Track cars already affected by this puddle so the same puddle does not repeatedly trigger one car.
+        self.hit_car_identifiers = set()
+        # Overlap several randomly offset circles to make an irregular puddle instead of a perfect circle.
+        self.blobs = [
+            (random.uniform(-radius * 0.5, radius * 0.5),
+             random.uniform(-radius * 0.4, radius * 0.4),
+             random.uniform(radius * 0.45, radius * 0.85))
+            for _ in range(5)
+        ]
+        self.blobs.append((0, 0, radius * 0.8))
