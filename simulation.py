@@ -282,3 +282,7 @@ class GameSimulation:
         ]
 
     # Combine impact effects by taking the strongest active value, so weaker hits do not cancel stronger ones.
+    def juice(self, shake_strength=0.0, hitstop_seconds=0.0, flash_intensity=0.0):
+        self.active_surface_shake_strength = max(self.active_surface_shake_strength, shake_strength)
+        self.hitstop_remaining = max(self.hitstop_remaining, hitstop_seconds)
+        self.flash_intensity = max(self.flash_intensity, flash_intensity)
