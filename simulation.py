@@ -697,3 +697,67 @@ class GameSimulation:
             elif distance < 140 * power and car.skid <= 0:
                 car.skid = 0.6
                 car.lateral_speed = (car.y - world_y) / (distance or 1) * 120
+
+    def animate_person(self, person, delta_time):
+        """Pose, hurt flash, burning and death animation (runs for alive and dead)."""
+        person.hurt_time = max(0.0, person.hurt_time - delta_time)
+        person.invulnerable_time = max(0.0, person.invulnerable_time - delta_time)
+        if person.carried_by:
+            body_x, body_y = person.carried_by.x, person.carried_by.y
+        else:
+            body_x, body_y = person.x, person.y
+        if not person.alive:
+            person.death_time += delta_time
+            person.pose += (math.pi / 2 - person.pose) * min(1.0, delta_time * 6)
+            if person.death_cause == "fire" and person.death_time < 3.5 and random.random() < 0.4:
+                self.particles.append(Particle(
+                    body_x + random.uniform(-12, 12),
+                    body_y,
+                    6,
+                    random.uniform(-8, 8),
+                    0,
+                    random.uniform(20, 40),
+                    (70, 70, 74),
+                    random.uniform(3, 6),
+                    1.4,
+                    gravity=-10
+                ))
+            return
+        is_lying = person.down_time > 0 or person.carried_by is not None
+        # Body angles use radians: 0 is upright and pi/2 is lying down. Ease toward the target pose.
+        target_pose = math.pi / 2 if is_lying else (0.22 if (person.dash > 0 or person.burn_time > 0) and person.moving else 0.0)
+        person.pose += (target_pose - person.pose) * min(1.0, delta_time * (14 if is_lying else 6))
+        if person.burn_time > 0 and not person.saved:
+            person.burn_time -= delta_time
+            person.charring_level = min(1.0, person.charring_level + delta_time * 0.2)
+            if random.random() < 0.7:
+                self.particles.append(Particle(
+                    body_x + random.uniform(-7, 7),
+                    body_y + random.uniform(-3, 3),
+                    random.uniform(8, 30),
+                    random.uniform(-10, 10),
+                    0,
+                    random.uniform(40, 80),
+                    random.choice([(255, 150, 40), (255, 90, 30), (255, 220, 90)]),
+                    random.uniform(2, 4),
+                    0.45,
+                    gravity=-30
+                ))
+            # Burn damage is 8 health per second; multiplying by delta_time makes damage follow simulated time.
+            # ไฟลดพลังชีวิต 8 หน่วยต่อวินาที จึงคูณเวลาต่อเฟรมเพื่อให้ความเสียหายตรงกับเวลาในเกม
+            self.damage(person, 8 * delta_time, "burn")
+        elif person.injured and not person.saved:
+            person.drip_time -= delta_time
+            if person.drip_time <= 0:
+                person.drip_time = random.uniform(0.3, 0.7)
+                self.particles.append(Particle(
+                    body_x + random.uniform(-4, 4),
+                    body_y,
+                    14,
+                    0,
+                    0,
+                    0,
+                    BLOOD,
+                    2,
+                    1.2
+                ))
