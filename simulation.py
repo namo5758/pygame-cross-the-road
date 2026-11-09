@@ -505,3 +505,22 @@ class GameSimulation:
         if not person.saved and person.y < GOAL_Y - 6:
             person.burn_time = 0
             self.save(person)
+
+    def step_towards(self, person, delta_time, speed_value):
+        if not person.path:
+            return
+        target_x, target_y = person.path[0]
+        delta_x = target_x - person.x
+        delta_y = target_y - person.y
+        distance = math.hypot(delta_x, delta_y)
+        # Maximum distance this frame = speed * seconds. Snap to nearby waypoints to avoid walking past them.
+        step = speed_value * delta_time
+        if distance <= step:
+            self.move_constrained(person, target_x, target_y)
+            person.path.pop(0)
+        else:
+            # Divide the target vector by its length to get direction, then multiply by this frame distance.
+            # หารระยะในแต่ละแกนด้วยระยะรวมเพื่อหาทิศ แล้วคูณระยะที่เดินได้ในเฟรมนี้
+            self.move_constrained(person, person.x + delta_x / distance * step, person.y + delta_y / distance * step)
+
+    # Keep people inside world bounds and prevent road entry outside the zebra crossing.
