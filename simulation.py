@@ -536,3 +536,18 @@ class GameSimulation:
             elif in_road(person.y) and in_band(person.x):
                 next_x = clamp(next_x, CROSSING_START_X + 4, CROSSING_END_X - 4)
         person.x, person.y = next_x, next_y
+
+    def save(self, person):
+        person.saved = True
+        person.is_walking = False
+        person.panic = False
+        # Count saved people, then use modulo and floor division to arrange them in rows of six.
+        saved_slot = sum(1 for other_person in self.people if other_person.saved)
+        person.path = [(220 + (saved_slot % 6) * 100 + random.uniform(-10, 10), 40 + (saved_slot // 6) * 34)]
+        self.float_text(person.x, person.y, "ปลอดภัย!", GOOD_COLOR)
+        if person.carrying:
+            carried_person = person.carrying
+            person.carrying = None
+            carried_person.carried_by = None
+            carried_person.x, carried_person.y = person.x + 12, person.y
+            self.save(carried_person)
