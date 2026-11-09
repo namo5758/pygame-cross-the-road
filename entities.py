@@ -129,3 +129,73 @@ class Person:
                 waypoints.append((base_x, curb_y))
         waypoints.append((target_x, target_y))
         self.path = waypoints
+
+
+class Car:
+    def __init__(self, lane, kind, level_settings):
+        self.lane = lane
+        self.direction = LANE_DIRECTION[lane]
+        self.kind = kind
+        vehicle_specification = VEHICLES[kind]
+        self.length = vehicle_specification["length"]
+        self.width = vehicle_specification["width"]
+        self.height = vehicle_specification["height"]
+        speed_multiplier = vehicle_specification["speed"]
+        self.color = random.choice({
+            "truck": TRUCK_COLORS,
+            "moto": MOTORCYCLE_COLORS,
+            "sidecar": SIDECAR_COLORS,
+            "icecream": ICECREAM_COLORS,
+            "tanker": [(230, 232, 228)],
+        }.get(kind, CAR_COLORS))
+        self.cargo = random.choice(["passenger", "crates", "bottles"])   # what's in the sidecar
+        self.fuse = 0.0          # tanker: seconds until it blows up after a crash
+        self.burnt = False
+        self.skid_points = None  # last wheel positions, for skid marks
+        # Actual speed = lane speed * level multiplier * vehicle multiplier * random variation of +/-10%.
+        # ความเร็วจริงมาจากความเร็วเลน คูณความยาก คูณประเภทรถ แล้วสุ่มให้ต่างกันเล็กน้อย
+        self.base_speed = LANE_SPEED[lane] * level_settings["speed"] * speed_multiplier * random.uniform(0.9, 1.1)
+        self.speed = self.base_speed
+        # Spawn beyond the incoming screen edge so the vehicle enters smoothly.
+        self.x = -self.length if self.direction > 0 else SCREEN_WIDTH + self.length
+        self.y = lane_center(lane)
+        self.base_angle = 0.0 if self.direction > 0 else math.pi
+        self.heading = self.base_angle
+        self.lateral_speed = 0.0
+        self.skid = 0.0          # sliding on blood
+        self.stall = 0.0         # braking after hitting someone
+        self.wreck = False       # crashed, blocking the road
+        self.wreck_time = 0.0
+        self.towed = False       # hooked by a drone
+        self.lift = 0.0          # height while being carried away
+        self.rider_color = random.choice([(200, 60, 50), (50, 120, 200), (230, 200, 60)])
+
+    @property
+    def angle(self):
+        return self.heading
+
+    def blocks(self, lane_index):
+        """A wreck blocks every lane it overlaps; a moving car only its own lane."""
+        if not self.wreck:
+            return self.lane == lane_index
+        # Overlap occurs when center separation is smaller than the sum of half-widths, with a small margin.
+        return abs(lane_center(lane_index) - self.y) < self.width / 2 + LANE_HEIGHT / 2 - 6
+
+    # Use the nearest ground corner for drawing order so a car can cover objects behind it.
+    def depth(self):
+        return max(corner[1] for corner in box_corners(self.x, self.y, self.length, self.width, self.angle))
+
+    # Stationary wrecks and towed cars cannot hit people; moving or sliding cars can.
+    def dangerous(self):
+        return not self.wreck and not self.towed and (self.speed > 25 or self.skid > 0)
+
+    def hits(self, person_x, person_y, radius=8):
+        # Rotate the person by the negative car angle to express their position in the car frame.
+        # Collision then becomes two simple bounds checks against a rectangle expanded by the person radius.
+        # หมุนตำแหน่งคนกลับให้ตรงกับแนวรถก่อน จึงตรวจได้ง่ายว่าคนอยู่ในกรอบรถหรือไม่
+        cosine_angle, sine_angle = math.cos(-self.angle), math.sin(-self.angle)
+        delta_x = person_x - self.x
+        delta_y = person_y - self.y
+        local_x = delta_x * cosine_angle - delta_y * sine_angle
+        local_y = delta_x * sine_angle + delta_y * cosine_angle
+        return abs(local_x) < self.length / 2 + radius and abs(local_y) < self.width / 2 + radius
