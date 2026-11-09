@@ -199,3 +199,71 @@ class Car:
         local_x = delta_x * cosine_angle - delta_y * sine_angle
         local_y = delta_x * sine_angle + delta_y * cosine_angle
         return abs(local_x) < self.length / 2 + radius and abs(local_y) < self.width / 2 + radius
+
+
+class Drone:
+    """Tow drone: flies in, hooks a wrecked car, lifts it and flies away."""
+    def __init__(self, car):
+        self.car = car
+        # Choose the nearer horizontal exit and start the tow drone outside the upper part of the scene.
+        exit_side = -1 if car.x < SCREEN_WIDTH / 2 else 1
+        self.x = car.x + exit_side * 420
+        self.y = -60.0
+        self.z = 150.0
+        self.exit_x = -260 if exit_side < 0 else SCREEN_WIDTH + 260
+        self.state = "fly"
+        self.time_elapsed = 0.0
+        self.cable_extension = 0.0
+        self.done = False
+
+    def update(self, delta_time):
+        target_car = self.car
+        self.time_elapsed += delta_time
+        # Tow sequence: approach the car, lower the cable, lift the car, then carry it off-screen.
+        # โดรนทำงานเป็นสถานะตามลำดับ: บินเข้า → เกี่ยวรถ → ยกรถ → บินออก
+        if self.state == "fly":
+            delta_x = target_car.x - self.x
+            delta_y = target_car.y - self.y
+            distance = math.hypot(delta_x, delta_y)
+            # Distance this frame = speed * elapsed seconds. Normalize the target vector to obtain direction.
+            step = 380 * delta_time
+            # Ease toward the target height: add a fraction of the remaining difference each frame.
+            # The fraction is capped at 1 to avoid overshooting on a long frame.
+            # ค่อย ๆ ขยับเข้าหาเป้าหมายตามสัดส่วนของระยะที่เหลือ จึงเคลื่อนนุ่มขึ้นโดยไม่เลยเป้า
+            self.z += (120 - self.z) * min(1.0, 2 * delta_time)
+            if distance <= step:
+                self.x, self.y = target_car.x, target_car.y
+                self.state = "hook"
+                self.time_elapsed = 0.0
+            else:
+                self.x += delta_x / distance * step
+                self.y += delta_y / distance * step
+        elif self.state == "hook":
+            # Progress = elapsed / duration, capped at 1; this extends the cable fully over 0.6 seconds.
+            self.cable_extension = min(1.0, self.time_elapsed / 0.6)
+            if self.time_elapsed > 0.7:
+                target_car.towed = True              # no longer blocks traffic
+                self.state = "lift"
+                self.time_elapsed = 0.0
+        elif self.state == "lift":
+            # Interpolate lift height over 0.8 seconds: progress 0 is the start and 1 is fully lifted.
+            # ความคืบหน้า = เวลาที่ผ่านไป / เวลาทั้งหมด เมื่อได้ 1 แปลว่ายกเสร็จแล้ว
+            lift_progress = min(1.0, self.time_elapsed / 0.8)
+            target_car.lift = 70 * lift_progress
+            self.z = 120 + 40 * lift_progress
+            if lift_progress >= 1:
+                self.state = "away"
+                self.time_elapsed = 0.0
+        else:  # away
+            delta_x = self.exit_x - self.x
+            delta_y = -120 - self.y
+            distance = math.hypot(delta_x, delta_y) or 1
+            # Accelerate from 80 world units/second, adding 300 per second, with a maximum speed of 320.
+            fly_speed = min(320, 80 + self.time_elapsed * 300)
+            self.x += delta_x / distance * fly_speed * delta_time
+            self.y += delta_y / distance * fly_speed * delta_time
+            self.z += 20 * delta_time
+            target_car.lift += 20 * delta_time
+            target_car.x, target_car.y = self.x, self.y
+            if distance < 30 or self.x < -240 or self.x > SCREEN_WIDTH + 240:
+                self.done = True
