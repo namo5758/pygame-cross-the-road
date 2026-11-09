@@ -524,3 +524,15 @@ class GameSimulation:
             self.move_constrained(person, person.x + delta_x / distance * step, person.y + delta_y / distance * step)
 
     # Keep people inside world bounds and prevent road entry outside the zebra crossing.
+    def move_constrained(self, person, next_x, next_y):
+        next_x = clamp(next_x, 10, SCREEN_WIDTH - 10)
+        next_y = clamp(next_y, 16, WORLD_BOTTOM - 10)
+        if person.saved:
+            person.x, person.y = next_x, min(next_y, GOAL_Y - 8)
+            return
+        if in_road(next_y):
+            if not in_road(person.y) and not in_band(next_x):
+                next_y = person.y                      # can't step off the curb outside the crossing
+            elif in_road(person.y) and in_band(person.x):
+                next_x = clamp(next_x, CROSSING_START_X + 4, CROSSING_END_X - 4)
+        person.x, person.y = next_x, next_y
