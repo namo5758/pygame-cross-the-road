@@ -286,3 +286,11 @@ class GameSimulation:
         self.active_surface_shake_strength = max(self.active_surface_shake_strength, shake_strength)
         self.hitstop_remaining = max(self.hitstop_remaining, hitstop_seconds)
         self.flash_intensity = max(self.flash_intensity, flash_intensity)
+
+    def impact_text(self, world_x, world_y, text, color=ACCENT_COLOR, size=1.0):
+        # Count nearby impact labels and shift the new one upward by 38 units per label to reduce overlap.
+        stack = sum(1 for impact_message in self.impact_messages if abs(impact_message[0] - world_x) < 120 and abs(impact_message[1] - world_y) < 80)
+        self.impact_messages.append([world_x, world_y, text, 0.9, color, size, random.uniform(-12, 12), stack * 38])
+
+    # Particles spread outward with velocity components cos(angle)*speed and sin(angle)*speed.
+    # The y component is compressed for the scene style; upward velocity makes debris arc.
