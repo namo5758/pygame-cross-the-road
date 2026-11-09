@@ -30,13 +30,12 @@ def mix(first_color, second_color, blend_ratio):
 
 
 def project(world_x, world_y, world_z=0.0):
-    """พิกัดโลก -> จอ: ไกล (y น้อย) อยู่สูงบนจอ, ลอยสูง (z มาก) ถูกยกขึ้น
-    ต้องลบ z เพราะแกน y ของจอนับลงล่าง"""
+    """พิกัดโลก (x, y, z) -> พิกัดจอ"""
     return world_x, ORIGIN_Y + world_y * VERTICAL_SCALE - world_z * HEIGHT_SCALE
 
 
 def unproject(screen_x, screen_y):
-    """จอ -> พื้น (ใช้กับเมาส์) สมมติ z = 0 เพราะจุดบนจอจุดเดียวบอกความสูงไม่ได้"""
+    """พิกัดจอ -> พื้น (z = 0) ใช้กับเมาส์"""
     return screen_x, (screen_y - ORIGIN_Y) / VERTICAL_SCALE
 
 
@@ -82,16 +81,11 @@ def local(center_x, center_y, angle, local_x, local_y):
 
 
 def draw_box(surface, center_x, center_y, length, width, z_bottom, z_top, angle, color, top_color=None, outline=True):
-    """วาดกล่องสามมิติ: ด้านข้างที่หันเข้ากล้อง + ฝาบน
-
-    Back-face culling: หา normal ของแต่ละด้านแล้ววาดเฉพาะด้านที่หันเข้ากล้อง (normal_y > 0)
-    ความเข้มของสีด้านข้างขึ้นกับ normal_x จึงดูเหมือนมีแสงส่องจากด้านหนึ่ง
-    """
+    """กล่อง 3 มิติ: วาดเฉพาะด้านข้างที่หันเข้ากล้อง (back-face culling) แล้วปิดด้วยฝาบน"""
     corners = box_corners(center_x, center_y, length, width, angle)
     for index in range(4):
         corner_start = corners[index]
-        corner_end = corners[(index + 1) % 4]               # % 4 ทำให้มุมสุดท้ายวนกลับไปปิดที่มุมแรก
-        # normal = ขอบที่หมุน 90 องศา; ถ้า dot product กับทิศออกจากจุดกลางติดลบ แปลว่าชี้เข้าใน ให้กลับทิศ
+        corner_end = corners[(index + 1) % 4]
         normal_x = corner_end[1] - corner_start[1]
         normal_y = -(corner_end[0] - corner_start[0])
         midpoint_x = (corner_start[0] + corner_end[0]) / 2 - center_x
