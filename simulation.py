@@ -344,3 +344,9 @@ class GameSimulation:
             ))
 
     # Join each wheel position to its previous-frame position to draw continuous tire trails.
+    def skid_marks(self, car):
+        points = [local(car.x, car.y, car.angle, -car.length * 0.32, local_y) for local_y in (-car.width / 2 + 3, car.width / 2 - 3)]
+        if car.skid_points:
+            for old_point, new_point in zip(car.skid_points, points):
+                pygame.draw.line(self.skid_mark_surface, (22, 22, 26, 120), project(*old_point), project(*new_point), 4 if car.width > 30 else 2)
+        car.skid_points = points
