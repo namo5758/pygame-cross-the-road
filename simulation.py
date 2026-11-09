@@ -576,3 +576,51 @@ class GameSimulation:
         if person.fuel:                           # the fuel can bursts on impact
             person.fuel = False
             self.explode(person.x, person.y)
+
+    def damage(self, person, amount, source, push_velocity=None):
+        """source: 'car', 'fire' (explosion), 'burn' (on fire, per frame)."""
+        if not person.alive or person.saved:
+            return
+        person.health -= amount
+        if source != "burn":
+            person.hurt_time = 0.4
+            self.float_text(person.x, person.y, f"-{int(amount)}", BAD_COLOR)
+            for _ in range(8):
+                angle = random.uniform(0, math.tau)
+                speed_value = random.uniform(30, 120)
+                self.particles.append(Particle(
+                    person.x,
+                    person.y,
+                    18,
+                    math.cos(angle) * speed_value,
+                    math.sin(angle) * speed_value * 0.6,
+                    random.uniform(60, 160),
+                    random.choice([BLOOD, BLOOD_HIGHLIGHT]),
+                    random.uniform(2, 3),
+                    0.8
+                ))
+        if source == "car":
+            self.blood_puddles.append(Puddle(person.x, person.y, 15))
+        if push_velocity:                              # knocked off your feet
+            person.slip_time = 0.4
+            person.slip_velocity = push_velocity
+            person.slip_immune = 1.0
+            person.down_time = 1.1
+            person.fall_direction = 1 if push_velocity[0] >= 0 else -1
+            person.path = []
+            person.panic = False
+            if person.carrying:
+                carried_person = person.carrying
+                person.carrying = None
+                carried_person.carried_by = None
+                carried_person.x = person.x + 14
+                carried_person.y = person.y + 8
+                carried_person.down_time = 1.0
+                carried_person.fall_direction = person.fall_direction
+        if person.health <= 0:
+            self.die(person, source)
+            return
+        if source == "car":
+            self.toast(f"{person.information['name']}โดนชน!  HP เหลือ {int(person.health)}", BAD_COLOR)
+            if person.injured:
+                self.float_text(person.x, person.y - 10, "บาดเจ็บหนัก", BAD_COLOR)
