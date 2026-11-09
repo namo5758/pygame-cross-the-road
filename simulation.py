@@ -651,3 +651,49 @@ class GameSimulation:
         if person.fuel:
             person.fuel = False
             self.explode(person.x, person.y)
+
+    def explode(self, world_x, world_y, power=1.0):
+        is_big = power > 1.2
+        self.toast("รถขนน้ำมันระเบิด!" if is_big else "ถังน้ำมันระเบิด!", BAD_COLOR)
+        self.fires.append(Fire(world_x, world_y, 58 * power))
+        self.juice(shake_strength=16 * power, hitstop_seconds=0.12 * power, flash_intensity=0.6 if is_big else 0.45)
+        self.impact_text(world_x, world_y, "ตูม!!", (255, 150, 40), 1.3 * power)
+        # Explosion power increases the damage radius, but the radius multiplier is capped at 1.35.
+        blast_radius = 90 * min(power, 1.35)                     # people-damage radius (visuals stay big)
+        for _ in range(int(60 * power)):
+            angle = random.uniform(0, math.tau)
+            speed_value = random.uniform(60, 320) * power
+            self.particles.append(Particle(
+                world_x,
+                world_y,
+                10,
+                math.cos(angle) * speed_value,
+                math.sin(angle) * speed_value * 0.6,
+                random.uniform(100, 380),
+                random.choice([(255, 210, 80), (255, 140, 30), (230, 70, 30), (90, 90, 90)]),
+                random.uniform(3, 7),
+                random.uniform(0.6, 1.3)
+            ))
+        for person in self.people:
+            distance = math.hypot(person.x - world_x, person.y - world_y)
+            if person.alive and not person.saved and distance < blast_radius and person.carried_by is None:
+                line_distance = distance or 1
+                # Normalize the direction away from the explosion and multiply by 320 for outward knockback.
+                push_velocity = ((person.x - world_x) / line_distance * 320, (person.y - world_y) / line_distance * 320)
+                person.burn_time = max(person.burn_time, 1.5)
+                had_fuel = person.fuel
+                person.fuel = False
+                # Linear damage falloff: 50 at the center, approaching 10 at the edge of the blast radius.
+                # ยิ่งไกลจากจุดระเบิดยิ่งเสียพลังชีวิตน้อย: กลางวงเสีย 50 และใกล้ขอบวงเสียประมาณ 10
+                self.damage(person, 10 + 40 * (1 - distance / blast_radius), "fire", push_velocity)
+                if had_fuel:
+                    self.explode(person.x, person.y)
+        for car in list(self.cars):
+            if car.towed or car.wreck:
+                continue
+            distance = math.hypot(car.x - world_x, car.y - world_y)
+            if distance < 80 * power:
+                self.crash(car)
+            elif distance < 140 * power and car.skid <= 0:
+                car.skid = 0.6
+                car.lateral_speed = (car.y - world_y) / (distance or 1) * 120
