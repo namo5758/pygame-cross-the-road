@@ -560,3 +560,19 @@ class GameSimulation:
                 if (person.alive and not person.saved and person.carried_by is None and person.invulnerable_time <= 0
                         and car.hits(person.x, person.y, 7)):
                     self.car_hit(person, car)
+
+    def car_hit(self, person, car):
+        # Scale base hit damage by speed/180, limited to 0.5..1.4; skidding adds 10 extra damage.
+        speed_factor = clamp(car.speed / 180, 0.5, 1.4)
+        damage_amount = VEHICLES[car.kind]["damage"] * speed_factor + (10 if car.skid > 0 else 0)
+        self.juice(shake_strength=5, hitstop_seconds=0.04)
+        self.impact_text(person.x, person.y, "ปั้ก!", (255, 255, 255), 0.7)
+        push_velocity = (car.direction * (140 + car.speed * 0.6), random.uniform(-70, 70))
+        person.invulnerable_time = 1.6
+        if car.skid <= 0:                      # the driver slams on the brakes
+            car.speed *= 0.3
+            car.stall = max(car.stall, 1.0)
+        self.damage(person, damage_amount, "car", push_velocity)
+        if person.fuel:                           # the fuel can bursts on impact
+            person.fuel = False
+            self.explode(person.x, person.y)
