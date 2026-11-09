@@ -410,3 +410,98 @@ class GameSimulation:
                 0.8
             ))
         self.toast("รถชนกัน! โดรนกำลังมายกออก", ACCENT_COLOR)
+
+    def update_person(self, person, delta_time):
+        if not person.alive or person.carried_by:
+            return
+        person.cooldown = max(0.0, person.cooldown - delta_time)
+        person.sign_time = max(0.0, person.sign_time - delta_time)
+        person.slip_immune = max(0.0, person.slip_immune - delta_time)
+        if person.dash > 0:
+            person.dash -= delta_time
+            if person.dash <= 0:
+                person.tired = 1.2
+        elif person.tired > 0:
+            person.tired -= delta_time
+        if person.down_time > 0:
+            person.down_time -= delta_time
+        old_position = (person.x, person.y)
+
+        if person.slip_time > 0:
+            person.slip_time -= delta_time
+            person.x = clamp(person.x + person.slip_velocity[0] * delta_time, 10, SCREEN_WIDTH - 10)
+            person.y = clamp(person.y + person.slip_velocity[1] * delta_time, 16, WORLD_BOTTOM - 10)
+            # Reduce sliding velocity by a time-scaled fraction to model friction.
+            # ลดความเร็วลื่นลงทีละเฟรมเพื่อเลียนแบบแรงเสียดทาน
+            person.slip_velocity = (person.slip_velocity[0] * (1 - 3 * delta_time), person.slip_velocity[1] * (1 - 3 * delta_time))
+        elif person.down_time > 0:
+            pass
+        elif person.saved:
+            self.step_towards(person, delta_time, person.speed() * 0.7)
+        else:
+            # the kid panics when nobody is close
+            if person.kind == "kid":
+                near = any(
+                    other_person is not person and other_person.alive and math.hypot(other_person.x - person.x, other_person.y - person.y) < 75
+                    for other_person in self.people
+                )
+                # Reset the timer when somebody is near; otherwise accumulate seconds until the child panics.
+                person.alone_time = 0 if near else person.alone_time + delta_time
+                if person.alone_time > 2.0 and not person.panic:
+                    person.panic = True
+                    self.toast("เด็กอยู่คนเดียว ตกใจเดินมั่ว!", BAD_COLOR)
+                elif near and person.panic:
+                    person.panic = False
+                    person.path = []
+            if person.panic:
+                person.wander_time -= delta_time
+                if person.wander_time <= 0:
+                    wander_angle = random.uniform(0, math.tau)
+                    # cos(angle), sin(angle) form a unit vector, giving a random direction without changing walking speed.
+                    person.wander_direction = (math.cos(wander_angle), math.sin(wander_angle))
+                    person.wander_time = random.uniform(0.4, 0.9)
+                walk_speed = person.speed() * 0.6
+                self.move_constrained(
+                    person,
+                    person.x + person.wander_direction[0] * walk_speed * delta_time,
+                    person.y + person.wander_direction[1] * walk_speed * delta_time
+                )
+            else:
+                if person.is_walking and not person.path:
+                    self.plan_crossing(person)       # keep going after getting back up
+                self.step_towards(person, delta_time, person.speed())
+
+        person.moving = math.hypot(person.x - old_position[0], person.y - old_position[1]) > 0.05
+        if person.moving:
+            person.walk_phase += delta_time * (1.6 if person.dash > 0 else 1)
+            if abs(person.x - old_position[0]) > 0.05:
+                person.facing = 1 if person.x > old_position[0] else -1
+
+        # slipping on blood
+        if person.slip_time <= 0 and person.slip_immune <= 0 and person.moving and person.down_time <= 0:
+            for puddle in self.blood_puddles:
+                if math.hypot(person.x - puddle.x, person.y - puddle.y) < puddle.radius * 0.8:
+                    delta_x, delta_y = person.x - old_position[0], person.y - old_position[1]
+                    # Normalize the latest movement direction, then multiply by 190 to set slipping speed.
+                    # Use 1 for a zero distance to avoid division by zero.
+                    distance = math.hypot(delta_x, delta_y) or 1
+                    person.slip_time = 0.45
+                    person.slip_immune = 1.2
+                    person.slip_velocity = (delta_x / distance * 190, delta_y / distance * 190)
+                    person.path = []
+                    self.float_text(person.x, person.y, "ลื่น!", ACCENT_COLOR)
+                    break
+
+        # walking through fire sets you alight
+        if not person.saved:
+            for fire in self.fires:
+                if math.hypot(person.x - fire.x, (person.y - fire.y) * 1.3) < fire.radius * 0.7:
+                    if person.burn_time <= 0:
+                        self.toast(f"{person.information['name']}ติดไฟ!", BAD_COLOR)
+                    person.burn_time = max(person.burn_time, 1.2)
+                    break
+
+        # reached the safe zone
+        if not person.saved and person.y < GOAL_Y - 6:
+            person.burn_time = 0
+            self.save(person)
