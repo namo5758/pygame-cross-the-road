@@ -551,3 +551,12 @@ class GameSimulation:
             carried_person.carried_by = None
             carried_person.x, carried_person.y = person.x + 12, person.y
             self.save(carried_person)
+
+    def check_hits(self):
+        for car in self.cars:
+            if not car.dangerous():
+                continue
+            for person in self.people:
+                if (person.alive and not person.saved and person.carried_by is None and person.invulnerable_time <= 0
+                        and car.hits(person.x, person.y, 7)):
+                    self.car_hit(person, car)
