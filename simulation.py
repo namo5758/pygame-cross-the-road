@@ -761,3 +761,17 @@ class GameSimulation:
                     2,
                     1.2
                 ))
+
+    def check_end(self):
+        # Booleans count as 1 or 0 in sum. Lose when even all remaining survivors cannot reach the target.
+        # Otherwise finish with a win once nobody is left to cross.
+        # แพ้เมื่อจำนวนคนที่ยังช่วยได้รวมกับคนที่รอดไม่ถึงเป้าหมาย ชนะเมื่อไม่มีคนเหลือให้ข้ามและไม่เข้าเงื่อนไขแพ้
+        saved_count = sum(person.saved for person in self.people)
+        pending_count = sum(person.alive and not person.saved for person in self.people)
+        target_count = self.current_level["target"]
+        if saved_count + pending_count < target_count:
+            self.state = "lose"
+            self.end_screen_timer = 0
+        elif pending_count == 0:
+            self.state = "win"
+            self.end_screen_timer = 0
