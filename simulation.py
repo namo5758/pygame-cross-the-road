@@ -294,3 +294,53 @@ class GameSimulation:
 
     # Particles spread outward with velocity components cos(angle)*speed and sin(angle)*speed.
     # The y component is compressed for the scene style; upward velocity makes debris arc.
+    def debris(self, car, count=8):
+        """Car parts flying off: body panels, glass and a wheel or two."""
+        for _ in range(count):
+            angle = random.uniform(0, math.tau)
+            speed_value = random.uniform(80, 260)
+            particle_color = random.choice([car.color, shade(car.color, 0.7), (60, 62, 66)])
+            self.particles.append(Particle(
+                car.x,
+                car.y,
+                car.height * 0.6,
+                math.cos(angle) * speed_value,
+                math.sin(angle) * speed_value * 0.6,
+                random.uniform(150, 320),
+                particle_color,
+                random.uniform(4, 7),
+                random.uniform(1.6, 2.6),
+                gravity=700,
+                shape="chunk"
+            ))
+        for _ in range(random.randint(1, 2)):
+            angle = random.uniform(0, math.tau)
+            self.particles.append(Particle(
+                car.x,
+                car.y,
+                10,
+                math.cos(angle) * 200,
+                math.sin(angle) * 120,
+                260,
+                (28, 28, 32),
+                6,
+                2.6,
+                gravity=700,
+                shape="wheel"
+            ))
+        for _ in range(10):
+            angle = random.uniform(0, math.tau)
+            speed_value = random.uniform(60, 200)
+            self.particles.append(Particle(
+                car.x,
+                car.y,
+                car.height * 0.8,
+                math.cos(angle) * speed_value,
+                math.sin(angle) * speed_value * 0.6,
+                random.uniform(60, 180),
+                random.choice([(180, 220, 240), (230, 245, 255)]),
+                2,
+                0.9
+            ))
+
+    # Join each wheel position to its previous-frame position to draw continuous tire trails.
