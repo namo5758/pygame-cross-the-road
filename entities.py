@@ -290,3 +290,20 @@ class Fire:
     def __init__(self, x, y, radius=55):
         self.x, self.y, self.radius = x, y, radius
         self.life = 4.0
+
+
+class Particle:
+    def __init__(self, x, y, z, velocity_x, velocity_y, velocity_z, color, size, life, gravity=500, shape="dot"):
+        self.x, self.y, self.z = x, y, z
+        self.velocity_x = velocity_x
+        self.velocity_y = velocity_y
+        self.velocity_z = velocity_z
+        self.color, self.size = color, size
+        # Keep both remaining and initial lifetime so rendering can compute a fade fraction.
+        self.life = self.maximum_life = life
+        # Vertical acceleration: positive gravity pulls particles down; negative gravity makes smoke or flames rise.
+        # แรงโน้มถ่วงบวกดึงเศษวัตถุลง ส่วนค่าลบทำให้ควันหรือเปลวไฟลอยขึ้น
+        self.gravity = gravity
+        self.shape = shape                  # "dot", "chunk" (car part) or "wheel"
+        self.angle = random.uniform(0, math.tau)
+        self.spin = random.uniform(-12, 12)
