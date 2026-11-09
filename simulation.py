@@ -350,3 +350,63 @@ class GameSimulation:
             for old_point, new_point in zip(car.skid_points, points):
                 pygame.draw.line(self.skid_mark_surface, (22, 22, 26, 120), project(*old_point), project(*new_point), 4 if car.width > 30 else 2)
         car.skid_points = points
+
+    def crash(self, *cars):
+        # Crash center = average of the involved car centers; shared debris and messages appear here.
+        mean_x = sum(car.x for car in cars) / len(cars)
+        mean_y = sum(car.y for car in cars) / len(cars)
+        for car in cars:
+            if car.wreck or car.towed:
+                continue
+            car.wreck = True
+            car.speed, car.skid, car.lateral_speed = 0, 0, 0
+            car.heading += random.uniform(-0.3, 0.3)
+            car.color = shade(car.color, 0.7)
+            self.drones.append(Drone(car))
+            self.debris(car)
+            if car.kind == "icecream":
+                for _ in range(4):                       # ice cream all over the road (slippery!)
+                    goo_color = random.choice(ICECREAM_GOO)
+                    self.blood_puddles.append(Puddle(
+                        car.x + random.uniform(-50, 50),
+                        car.y + random.uniform(-25, 25),
+                        random.uniform(20, 28),
+                        goo_color,
+                        shade(goo_color, 1.15)
+                    ))
+                for _ in range(14):
+                    angle = random.uniform(0, math.tau)
+                    self.particles.append(Particle(
+                        car.x,
+                        car.y,
+                        car.height + 20,
+                        math.cos(angle) * 150,
+                        math.sin(angle) * 90,
+                        random.uniform(150, 280),
+                        random.choice(ICECREAM_GOO),
+                        random.uniform(4, 7),
+                        1.4
+                    ))
+                self.impact_text(car.x, car.y - 20, "ไอติมเละ!", (250, 190, 212), 0.9)
+            elif car.kind == "tanker":
+                car.fuse = 0.9                              # leaking... about to blow
+                self.impact_text(car.x, car.y - 20, "น้ำมันรั่ว!", BAD_COLOR, 0.9)
+            elif car.kind in ("moto", "sidecar"):
+                car.heading += random.uniform(0.6, 1.2) * random.choice([-1, 1])   # bike falls over
+        self.juice(shake_strength=11, hitstop_seconds=0.09, flash_intensity=0.35)
+        self.impact_text(mean_x, mean_y, "โครม!", ACCENT_COLOR, 1.2)
+        for _ in range(26):
+            angle = random.uniform(0, math.tau)
+            speed_value = random.uniform(60, 220)
+            self.particles.append(Particle(
+                mean_x,
+                mean_y,
+                20,
+                math.cos(angle) * speed_value,
+                math.sin(angle) * speed_value * 0.6,
+                random.uniform(80, 220),
+                random.choice([(255, 220, 120), (200, 200, 205), (120, 170, 220), (60, 60, 64)]),
+                random.uniform(2, 4),
+                0.8
+            ))
+        self.toast("รถชนกัน! โดรนกำลังมายกออก", ACCENT_COLOR)
