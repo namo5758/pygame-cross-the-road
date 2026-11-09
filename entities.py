@@ -284,3 +284,9 @@ class Puddle:
             for _ in range(5)
         ]
         self.blobs.append((0, 0, radius * 0.8))
+
+
+class Fire:
+    def __init__(self, x, y, radius=55):
+        self.x, self.y, self.radius = x, y, radius
+        self.life = 4.0
