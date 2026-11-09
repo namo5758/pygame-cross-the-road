@@ -624,3 +624,30 @@ class GameSimulation:
             self.toast(f"{person.information['name']}โดนชน!  HP เหลือ {int(person.health)}", BAD_COLOR)
             if person.injured:
                 self.float_text(person.x, person.y - 10, "บาดเจ็บหนัก", BAD_COLOR)
+
+    def die(self, person, source):
+        person.health = 0
+        person.alive = False
+        person.is_walking = False
+        person.path = []
+        person.burn_time = 0
+        person.death_time = 0.0
+        person.death_cause = "fire" if source in ("fire", "burn") else "car"
+        if person.death_cause == "car":
+            self.blood_puddles.append(Puddle(person.x, person.y, 26))
+            self.toast(f"{person.information['name']}เสียชีวิต", BAD_COLOR)
+        else:
+            person.charring_level = 1.0
+            self.toast(f"{person.information['name']}ถูกไฟคลอกเสียชีวิต", BAD_COLOR)
+        if person.carrying:
+            carried_person = person.carrying
+            person.carrying = None
+            carried_person.carried_by = None
+            carried_person.x = person.x + 16
+            carried_person.y = person.y + 10
+        if person.carried_by:
+            person.carried_by.carrying = None
+            person.carried_by = None
+        if person.fuel:
+            person.fuel = False
+            self.explode(person.x, person.y)
