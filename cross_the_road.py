@@ -33,35 +33,23 @@ from entities import Person
 from fonts import load_font
 from game_config import (
     ACCENT_COLOR,
-    ASPHALT,
-    ASPHALT_SPECK,
-    BACKGROUND_COLOR,
     CROSSING_START_X,
     CROSSING_END_X,
     FRAMES_PER_SECOND,
-    GOAL_LINE_COLOR,
     GOAL_Y,
     GOOD_COLOR,
     HEADS_UP_DISPLAY_Y,
-    LANE_DIRECTION,
-    LANE_HEIGHT,
     LANES,
     LEVELS,
     MUTED_COLOR,
-    PAVEMENT_COLOR,
-    PAVEMENT_LINE_COLOR,
     ROAD_BOTTOM,
-    ROAD_TOP,
     ROSTER,
     SCREEN_HEIGHT,
     SCREEN_WIDTH,
-    SLAB_FRONT_COLOR,
     TEXT_COLOR,
-    WHITE,
-    WORLD_BOTTOM,
-    YELLOW,
 )
-from geometry import clamp, draw_box, lane_of, project, shade
+from geometry import clamp, lane_of, project
+from render_ground import build_ground
 from rendering import GameRenderer
 from simulation import GameSimulation
 
@@ -75,7 +63,6 @@ class Game(GameSimulation, GameRenderer):
         # The display is the visible window; the world canvas is an off-screen image used for camera shake.
         self.display_surface = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         self.world_canvas = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))        # drawn here, then shaken onto display
-        self.active_surface = self.display_surface
         self.font_impact = None
         self.clock = pygame.time.Clock()
         self.font_tiny = load_font(13)
@@ -84,7 +71,7 @@ class Game(GameSimulation, GameRenderer):
         self.font_bold = load_font(20, bold=True)
         self.font_large = load_font(40, bold=True)
         self.font_heading = load_font(26, bold=True)
-        self.ground_surface = self.build_ground()
+        self.ground_surface = build_ground()
         # Transparent layers hold ground stains, lane highlights, flashes, and persistent tire marks.
         # An alpha channel controls transparency: 0 is invisible and 255 is opaque.
         # วาดลงภาพพักก่อนนำไปแสดงจริง ส่วน alpha คือความทึบ: 0 โปร่งใส และ 255 ทึบเต็มที่
@@ -140,6 +127,8 @@ class Game(GameSimulation, GameRenderer):
         self.hitstop_remaining = 0.0                       # slow-motion freeze on big hits
         self.flash_intensity = 0.0                         # screen flash
         self.skid_mark_surface.fill((0, 0, 0, 0))
+        self.skid_segments = []
+        self.skid_fades_pending = 0
         self.skid_mark_fade_timer = 0.0
         self.elapsed_time = 0.0
         self.paused = False
@@ -163,127 +152,6 @@ class Game(GameSimulation, GameRenderer):
     def float_text(self, world_x, world_y, text, color):
         # Floating-text record: [world_x, world_y, height, text, remaining_seconds, color].
         self.floating_messages.append([world_x, world_y, 40.0, text, 1.2, color])
-
-    # ------------------------------------------------------------ ground art
-    def build_ground(self):
-        ground_surface = pygame.Surface((SCREEN_WIDTH, HEADS_UP_DISPLAY_Y))
-        ground_surface.fill(BACKGROUND_COLOR)
-        # A separate seeded generator repeats its random sequence each rebuild.
-        # Only calls through random_seed are repeatable; calls through random still vary.
-        # กำหนด seed ให้สุ่มซ้ำได้เฉพาะตัวสร้างนี้ ส่วน random ปกติยังเปลี่ยนได้ในแต่ละครั้ง
-        random_seed = random.Random(7)
-
-        # shophouses along the far side
-        building_x = -20
-        while building_x < SCREEN_WIDTH + 20:
-            house_width = random_seed.randint(90, 150)
-            house_color = random.choice([
-                (196, 160, 120), (170, 186, 196), (214, 196, 150),
-                (186, 140, 130), (150, 170, 150), (210, 210, 200)
-            ])
-            house_height = random_seed.randint(70, 140)
-            draw_box(
-                ground_surface,
-                building_x + house_width / 2,
-                -30,
-                house_width - 4,
-                56,
-                0,
-                house_height,
-                0,
-                house_color,
-                outline=False
-            )
-            far_top_y = project(0, -2, house_height)[1]
-            far_bottom_y = project(0, -2, 0)[1]
-            for window_y in range(int(max(far_top_y, 0)) + 6, int(far_bottom_y) - 14, 16):
-                for window_x in range(int(building_x + 10), int(building_x + house_width - 18), 22):
-                    pygame.draw.rect(ground_surface, shade(house_color, 0.55), (window_x, window_y, 12, 8))
-            pygame.draw.rect(ground_surface, shade(house_color, 0.4), (building_x + house_width / 2 - 14, far_bottom_y - 14, 28, 14))  # door
-            building_x += house_width
-
-        # far sidewalk = safe zone
-        pygame.draw.polygon(
-            ground_surface,
-            GOAL_LINE_COLOR,
-            [project(0, 0), project(SCREEN_WIDTH, 0), project(SCREEN_WIDTH, ROAD_TOP), project(0, ROAD_TOP)]
-        )
-        for grid_y in range(0, ROAD_TOP, 24):
-            pygame.draw.line(ground_surface, GOAL_LINE_COLOR, project(0, grid_y), project(SCREEN_WIDTH, grid_y))
-        for grid_x in range(0, SCREEN_WIDTH, 40):
-            pygame.draw.line(ground_surface, GOAL_LINE_COLOR, project(grid_x, 0), project(grid_x, ROAD_TOP))
-
-        # trees
-        for tree_x in (70, 250, 770, 950):
-            draw_box(ground_surface, tree_x, 14, 8, 8, 0, 34, 0, (110, 80, 50), outline=False)
-            for offset_x, offset_z, radius in ((-8, 40, 16), (8, 42, 15), (0, 52, 17)):
-                screen_position = project(tree_x + offset_x, 14, offset_z)
-                pygame.draw.circle(ground_surface, (60, 130, 70), screen_position, radius)
-                pygame.draw.circle(ground_surface, (80, 156, 86), (screen_position[0] - 4, screen_position[1] - 4), radius * 0.55)
-
-        # far curb (front face visible)
-        draw_box(ground_surface, SCREEN_WIDTH / 2, ROAD_TOP - 4, SCREEN_WIDTH + 40, 8, 0, 6, 0, (215, 210, 200), outline=False)
-
-        # road
-        pygame.draw.polygon(
-            ground_surface,
-            ASPHALT,
-            [project(0, ROAD_TOP), project(SCREEN_WIDTH, ROAD_TOP), project(SCREEN_WIDTH, ROAD_BOTTOM), project(0, ROAD_BOTTOM)]
-        )
-        for _ in range(1600):
-            speck_x, speck_y = project(random.uniform(0, SCREEN_WIDTH), random_seed.uniform(ROAD_TOP, ROAD_BOTTOM))
-            ground_surface.set_at((int(speck_x), int(speck_y)), ASPHALT_SPECK)
-
-        # lane markings
-        for lane_index in range(1, LANES):
-            marking_y = ROAD_TOP + LANE_HEIGHT * lane_index
-            # Opposing traffic directions get a double yellow divider; matching directions get dashed white lines.
-            if LANE_DIRECTION[lane_index - 1] != LANE_DIRECTION[lane_index]:
-                for line_offset in (-3, 3):  # double yellow centre line
-                    for segment in ((0, CROSSING_START_X - 40), (CROSSING_END_X + 40, SCREEN_WIDTH)):
-                        pygame.draw.line(ground_surface, YELLOW, project(segment[0], marking_y + line_offset), project(segment[1], marking_y + line_offset), 2)
-            else:
-                for grid_x in range(0, SCREEN_WIDTH, 60):
-                    if CROSSING_START_X - 40 < grid_x < CROSSING_END_X + 20:
-                        continue
-                    pygame.draw.line(ground_surface, WHITE, project(grid_x, marking_y), project(grid_x + 30, marking_y), 2)
-
-        # stop lines before the crossing
-        pygame.draw.line(ground_surface, WHITE, project(CROSSING_START_X - 30, ROAD_TOP + 2), project(CROSSING_START_X - 30, ROAD_TOP + LANE_HEIGHT * 2), 4)
-        pygame.draw.line(ground_surface, WHITE, project(CROSSING_END_X + 30, ROAD_TOP + LANE_HEIGHT * 2), project(CROSSING_END_X + 30, ROAD_BOTTOM - 2), 4)
-
-        # zebra crossing
-        zebra_y = ROAD_TOP + 8
-        while zebra_y + 12 < ROAD_BOTTOM - 4:
-            pygame.draw.polygon(
-                ground_surface,
-                WHITE,
-                [project(CROSSING_START_X, zebra_y), project(CROSSING_END_X, zebra_y), project(CROSSING_END_X, zebra_y + 13), project(CROSSING_START_X, zebra_y + 13)]
-            )
-            zebra_y += 24
-
-        # near sidewalk
-        pygame.draw.polygon(
-            ground_surface,
-            PAVEMENT_COLOR,
-            [project(0, ROAD_BOTTOM), project(SCREEN_WIDTH, ROAD_BOTTOM), project(SCREEN_WIDTH, WORLD_BOTTOM), project(0, WORLD_BOTTOM)]
-        )
-        for grid_y in range(ROAD_BOTTOM, WORLD_BOTTOM, 24):
-            pygame.draw.line(ground_surface, PAVEMENT_LINE_COLOR, project(0, grid_y), project(SCREEN_WIDTH, grid_y))
-        for grid_x in range(0, SCREEN_WIDTH, 40):
-            pygame.draw.line(ground_surface, PAVEMENT_LINE_COLOR, project(grid_x, ROAD_BOTTOM), project(grid_x, WORLD_BOTTOM))
-        pygame.draw.line(ground_surface, (226, 222, 212), project(0, ROAD_BOTTOM), project(SCREEN_WIDTH, ROAD_BOTTOM), 3)
-
-        # front of the sidewalk slab
-        slab_y = project(0, WORLD_BOTTOM)[1]
-        pygame.draw.rect(ground_surface, SLAB_FRONT_COLOR, (0, slab_y, SCREEN_WIDTH, HEADS_UP_DISPLAY_Y - slab_y))
-
-        # painted labels
-        label_safe = load_font(22, bold=True).render("ฝั่งปลอดภัย  SAFE ZONE", True, (140, 176, 130))
-        ground_surface.blit(label_safe, label_safe.get_rect(center=project(SCREEN_WIDTH / 2, 92)))
-        label_start = load_font(18, bold=True).render("จุดเริ่มต้น", True, (176, 168, 150))
-        ground_surface.blit(label_start, (16, project(0, WORLD_BOTTOM - 22)[1]))
-        return ground_surface
 
     # ------------------------------------------------------------ input
     def person_at(self, screen_x, screen_y, pick_radius=28):
