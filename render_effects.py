@@ -130,11 +130,6 @@ def draw_particles(surface, particles):
 
 def draw_floaters(surface, messages, font):
     for source_x, source_y, height_z, text, life_time, color in messages:
-        if not text:
-            center_x, center_y = project(source_x, source_y)
-            radius = 14 * (1 - life_time / 0.5) + 4
-            pygame.draw.ellipse(surface, color, (center_x - radius, center_y - radius * 0.5, radius * 2, radius), 1)
-            continue
         text_surface = font.render(text, True, color)
         text_surface.set_alpha(int(255 * min(1.0, life_time / 0.5)))
         surface.blit(text_surface, text_surface.get_rect(center=project(source_x, source_y, height_z + 20)))
