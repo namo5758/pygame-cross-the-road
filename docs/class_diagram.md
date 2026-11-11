@@ -20,10 +20,13 @@ classDiagram
 
     class GameRenderer {
         +draw()
-        +draw_person(person, carrier)
-        +draw_car(car)
-        +draw_heads_up_display()
-        +draw_end()
+        +update_hover()
+        +draw_ground_layers(surface)
+        +draw_depth_sorted_objects(surface)
+        +draw_flying_objects(surface)
+        +draw_flash(surface)
+        +present_world_with_shake(screen)
+        +render_cache() dict
     }
 
     class Game {
@@ -48,7 +51,7 @@ classDiagram
 | --- | --- | --- |
 | **Game** | ตั้งค่าเกม รับคำสั่งผู้เล่น และควบคุม game loop | [cross_the_road.py](../cross_the_road.py) |
 | GameSimulation | เดินเวลา เคลื่อนที่ ตรวจชน และตัดสินผลด่าน | [simulation.py](../simulation.py) |
-| GameRenderer | อ่านสถานะแล้ววาดฉาก ตัวละคร รถ และ UI | [rendering.py](../rendering.py) |
+| GameRenderer | อ่านสถานะแล้วกำหนดลำดับการวาด 1 เฟรม การวาดแต่ละอย่างเป็นฟังก์ชันใน `render_*.py` | [rendering.py](../rendering.py) |
 
 `GameSimulation` และ `GameRenderer` ทำงานเป็น mixin: เมธอดใช้ `self` ของ `Game` โดยตรง ไม่มีออบเจ็กต์ simulation หรือ renderer แยกต่างหาก
 
