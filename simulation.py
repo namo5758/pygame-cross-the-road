@@ -7,8 +7,6 @@ input stay out of this module so frame rules can be read top-to-bottom here.
 import math
 import random
 
-import pygame
-
 from entities import Car, Drone, Fire, Particle, Puddle
 from game_config import (
     ACCENT_COLOR,
@@ -27,7 +25,7 @@ from game_config import (
     VEHICLES,
     WORLD_BOTTOM,
 )
-from geometry import clamp, in_band, in_road, lane_center, local, project, shade
+from geometry import clamp, in_band, in_road, lane_center, local, shade
 
 
 class GameSimulation:
@@ -104,15 +102,13 @@ class GameSimulation:
         self.impact_messages = [impact_message for impact_message in self.impact_messages if impact_message[3] > 0]
 
         self.skid_mark_fade_timer += delta_time
-        if self.skid_mark_fade_timer > 0.5:                      # skid marks slowly fade away
+        if self.skid_mark_fade_timer > 0.5:                      # skid marks slowly fade away (drawn in render_ground.py)
             self.skid_mark_fade_timer = 0
-            # Multiplicative fading scales alpha by 246/255 every half-second while keeping the color channels unchanged.
-            self.skid_mark_surface.fill((255, 255, 255, 246), special_flags=pygame.BLEND_RGBA_MULT)
+            self.skid_fades_pending += 1
 
         for floater in self.floating_messages:
             floater[4] -= delta_time
-            if floater[3]:
-                floater[2] += 30 * delta_time
+            floater[2] += 30 * delta_time
         self.floating_messages = [floater for floater in self.floating_messages if floater[4] > 0]
 
         for toast_entry in self.toast_messages:
@@ -343,12 +339,13 @@ class GameSimulation:
                 0.9
             ))
 
-    # Join each wheel position to its previous-frame position to draw continuous tire trails.
+    # Join each rear wheel to where it was last frame; render_ground.draw_skid_marks paints the segments.
     def skid_marks(self, car):
         points = [local(car.x, car.y, car.angle, -car.length * 0.32, local_y) for local_y in (-car.width / 2 + 3, car.width / 2 - 3)]
         if car.skid_points:
+            width = 4 if car.width > 30 else 2
             for old_point, new_point in zip(car.skid_points, points):
-                pygame.draw.line(self.skid_mark_surface, (22, 22, 26, 120), project(*old_point), project(*new_point), 4 if car.width > 30 else 2)
+                self.skid_segments.append((old_point, new_point, width))
         car.skid_points = points
 
     def crash(self, *cars):
