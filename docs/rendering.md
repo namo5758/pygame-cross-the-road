@@ -6,17 +6,21 @@
 | `render_cars.py` | วาดรถทุกชนิด |
 | `render_people.py` | วาดคน (`PersonPose`) |
 | `render_effects.py` | ของบนพื้น (เลือด เงา วงใต้เท้า), เลนที่ถูกหยุด, โดรน, ไฟ, เศษชิ้นส่วน, ข้อความลอย, ข้อความแจ้งเตือน |
+| `render_ground.py` | พื้นหลัง (ตึก ทางเท้า ถนน ทางม้าลาย) วาดครั้งเดียวตอนเปิดเกม + รอยเบรก |
 | `render_hud.py` | แถบด้านล่าง + กล่องกลางจอ (หน้าเริ่ม ชนะ แพ้ หยุดชั่วคราว) |
 | `geometry.py` | `project()`, `local()`, `draw_box()` ใช้ร่วมกันทุกไฟล์ |
 | `fonts.py` | หาฟอนต์ที่แสดงภาษาไทยได้ |
 
 ไม่ใช้ไฟล์รูปเลย ทุกอย่างวาดด้วย `pygame.draw`
 
+`simulation.py` ไม่ import pygame แล้ว: รอยเบรกที่เคยวาดใน simulation ตอนนี้ simulation แค่เก็บเส้นไว้ใน `skid_segments`
+และนับจำนวนครั้งที่ต้องจางใน `skid_fades_pending` แล้ว `draw_skid_marks()` เป็นคนวาด
+
 ## 1 เฟรมวาดอะไรบ้าง
 
 ```
 draw()
- ├─ draw_ground_layers()          ถนน (วาดไว้ครั้งเดียว) + รอยล้อ + draw_decals() + draw_frozen_lanes()
+ ├─ draw_ground_layers()          ถนน (วาดไว้ครั้งเดียว) + draw_skid_marks() + draw_decals() + draw_frozen_lanes()
  ├─ update_hover()                เมาส์ชี้คนไหนอยู่
  ├─ draw_depth_sorted_objects()   รถ คน ไฟ  ── painter's algorithm
  ├─ draw_flying_objects()         รถที่ถูกยก + โดรน
@@ -42,7 +46,6 @@ screen_y = ORIGIN_Y + y × VERTICAL_SCALE − z × HEIGHT_SCALE
 
 y คือความลึกบนพื้น (ไกล → อยู่สูงบนจอ) z คือความสูงจากพื้น (สูง → ถูกยกขึ้น)
 ต้องลบ z เพราะแกน y ของจอนับลงล่าง
-`unproject()` ทำกลับด้านสำหรับเมาส์ โดยสมมติ z = 0 เพราะจุดบนจอจุดเดียวบอกความสูงไม่ได้
 
 **2. ของใกล้บังของไกล: painter's algorithm ใน `draw_depth_sorted_objects()`**
 
