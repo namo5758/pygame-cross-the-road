@@ -16,14 +16,20 @@ classDiagram
         +check_hits()
         +damage(person, amount, source, push_velocity)
         +check_end()
+        +toggle_go(person)
+        +use_ability(person)
+        +start_selected_crossing()
     }
 
     class GameRenderer {
         +draw()
-        +draw_person(person, carrier)
-        +draw_car(car)
-        +draw_heads_up_display()
-        +draw_end()
+        +update_hover()
+        +draw_ground_layers(surface)
+        +draw_depth_sorted_objects(surface)
+        +draw_flying_objects(surface)
+        +draw_flash(surface)
+        +present_world_with_shake(screen)
+        +render_cache() dict
     }
 
     class Game {
@@ -33,8 +39,7 @@ classDiagram
         +bool paused
         +reset()
         +handle_event(event)
-        +use_ability(person)
-        +start_selected_crossing()
+        +person_at(screen_x, screen_y)
         +run()
     }
 
@@ -47,8 +52,8 @@ classDiagram
 | คลาส | รับผิดชอบ | ไฟล์ |
 | --- | --- | --- |
 | **Game** | ตั้งค่าเกม รับคำสั่งผู้เล่น และควบคุม game loop | [cross_the_road.py](../cross_the_road.py) |
-| GameSimulation | เดินเวลา เคลื่อนที่ ตรวจชน และตัดสินผลด่าน | [simulation.py](../simulation.py) |
-| GameRenderer | อ่านสถานะแล้ววาดฉาก ตัวละคร รถ และ UI | [rendering.py](../rendering.py) |
+| GameSimulation | เดินเวลา เคลื่อนที่ ตรวจชน ตัดสินผลด่าน และคำสั่งของผู้เล่น (เดิน หยุด ใช้ความสามารถ) | [simulation.py](../simulation.py) |
+| GameRenderer | อ่านสถานะแล้วกำหนดลำดับการวาด 1 เฟรม การวาดแต่ละอย่างเป็นฟังก์ชันใน `render_*.py` | [rendering.py](../rendering.py) |
 
 `GameSimulation` และ `GameRenderer` ทำงานเป็น mixin: เมธอดใช้ `self` ของ `Game` โดยตรง ไม่มีออบเจ็กต์ simulation หรือ renderer แยกต่างหาก
 
@@ -112,16 +117,19 @@ classDiagram
 
 ## 3. เอฟเฟกต์ในโลกเกม — ข้อมูลที่มีอายุจำกัด
 
-เอฟเฟกต์ทั้งสามชนิดเก็บข้อมูลเป็นหลัก: `GameSimulation` อัปเดตและลบเมื่อหมดอายุ ส่วน `GameRenderer` นำข้อมูลไปวาด
+เอฟเฟกต์ทุกชนิดเก็บข้อมูลเป็นหลัก: `GameSimulation` อัปเดตและลบเมื่อหมดอายุ ส่วน `GameRenderer` นำข้อมูลไปวาด
 
 ```mermaid
 classDiagram
     direction TB
 
     class Game {
-        +list~Puddle~ blood_puddles
+        +list~Puddle~ puddles
         +list~Fire~ fires
         +list~Particle~ particles
+        +list~FloatingText~ floating_messages
+        +list~Toast~ toast_messages
+        +list~ImpactText~ impact_messages
     }
 
     class Puddle {
@@ -129,7 +137,7 @@ classDiagram
         +float y
         +float radius
         +float life
-        +set hit_car_identifiers
+        +set~Car~ hit_cars
     }
 
     class Fire {
@@ -147,9 +155,30 @@ classDiagram
         +str shape
     }
 
-    Game "1" *-- "0..*" Puddle : blood_puddles
+    class FloatingText {
+        +str text
+        +float height
+        +float life
+    }
+
+    class Toast {
+        +str text
+        +float life
+    }
+
+    class ImpactText {
+        +str text
+        +float size
+        +float rotation
+        +float life
+    }
+
+    Game "1" *-- "0..*" Puddle : puddles
     Game "1" *-- "0..*" Fire : fires
     Game "1" *-- "0..*" Particle : particles
+    Game "1" *-- "0..*" FloatingText : floating_messages
+    Game "1" *-- "0..*" Toast : toast_messages
+    Game "1" *-- "0..*" ImpactText : impact_messages
 
     style Game fill:#fff1e8,stroke:#bf4520,color:#2d3142,stroke-width:2px
 ```
@@ -159,5 +188,8 @@ classDiagram
 | Puddle | คราบเลือดหรือไอศกรีมที่ทำให้ลื่น บันทึกรถที่ได้รับผลไปแล้ว |
 | Fire | พื้นที่ไฟไหม้ กำหนดตำแหน่ง รัศมี และอายุ |
 | Particle | เศษชิ้นส่วน ควัน หรือประกาย มีตำแหน่ง ความเร็ว แรงโน้มถ่วง และอายุ |
+| FloatingText | ข้อความเล็กลอยขึ้นจากจุดในโลก เช่น "ลื่น!" "-12" (dataclass) |
+| Toast | ข้อความแจ้งเตือนกลางจอด้านบน (dataclass) |
+| ImpactText | คำใหญ่ตอนชน เช่น "โครม!" "ตูม!!" (dataclass) |
 
-Person, Car, Drone, Puddle, Fire และ Particle อยู่ในไฟล์ entities.py ส่วน Game อยู่ในไฟล์ cross_the_road.py
+Person, Car, Drone, Puddle, Fire, Particle และคลาสข้อความทั้ง 3 อยู่ในไฟล์ entities.py ส่วน Game อยู่ในไฟล์ cross_the_road.py

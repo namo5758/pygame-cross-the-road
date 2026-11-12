@@ -34,13 +34,13 @@ def project(world_x, world_y, world_z=0.0):
     return world_x, ORIGIN_Y + world_y * VERTICAL_SCALE - world_z * HEIGHT_SCALE
 
 
-def unproject(screen_x, screen_y):
-    """พิกัดจอ -> พื้น (z = 0) ใช้กับเมาส์"""
-    return screen_x, (screen_y - ORIGIN_Y) / VERTICAL_SCALE
-
-
 def lane_center(lane_index):
     return ROAD_TOP + LANE_HEIGHT * (lane_index + 0.5)
+
+
+def paired_lane(lane_index):
+    """เลนข้าง ๆ ที่รถวิ่งทางเดียวกัน: 0 กับ 1, 2 กับ 3"""
+    return lane_index + 1 if lane_index % 2 == 0 else lane_index - 1
 
 
 def lane_of(world_y):

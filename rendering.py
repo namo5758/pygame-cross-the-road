@@ -16,6 +16,7 @@ from render_effects import (
     draw_particles,
     draw_toasts,
 )
+from render_ground import draw_skid_marks
 from render_hud import draw_heads_up_display, draw_overlay_card, roster_rectangles
 from render_people import draw_person
 
@@ -24,7 +25,6 @@ class GameRenderer:
 
     def draw(self):
         world = self.world_canvas
-        self.active_surface = world
         self.draw_ground_layers(world)
         self.update_hover()
         self.draw_depth_sorted_objects(world)
@@ -35,7 +35,6 @@ class GameRenderer:
         self.draw_flash(world)
 
         screen = self.display_surface
-        self.active_surface = screen
         self.present_world_with_shake(screen)
         draw_toasts(screen, self.toast_messages, self.font_bold)
         draw_heads_up_display(self, screen)
@@ -58,6 +57,7 @@ class GameRenderer:
 
     def draw_ground_layers(self, surface):
         surface.blit(self.ground_surface, (0, 0))
+        draw_skid_marks(self)
         surface.blit(self.skid_mark_surface, (0, 0))
         draw_decals(self)
         surface.blit(self.decal_surface, (0, 0))

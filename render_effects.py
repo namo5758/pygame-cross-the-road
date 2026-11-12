@@ -13,7 +13,7 @@ def draw_decals(game):
     surface = game.decal_surface
     surface.fill((0, 0, 0, 0))
 
-    for puddle in game.blood_puddles:
+    for puddle in game.puddles:
         alpha = int(220 * min(1.0, puddle.life / 3.0))
         for blob_x, blob_y, radius in puddle.blobs:
             center_x, center_y = project(puddle.x + blob_x, puddle.y + blob_y)
@@ -129,26 +129,21 @@ def draw_particles(surface, particles):
 
 
 def draw_floaters(surface, messages, font):
-    for source_x, source_y, height_z, text, life_time, color in messages:
-        if not text:
-            center_x, center_y = project(source_x, source_y)
-            radius = 14 * (1 - life_time / 0.5) + 4
-            pygame.draw.ellipse(surface, color, (center_x - radius, center_y - radius * 0.5, radius * 2, radius), 1)
-            continue
-        text_surface = font.render(text, True, color)
-        text_surface.set_alpha(int(255 * min(1.0, life_time / 0.5)))
-        surface.blit(text_surface, text_surface.get_rect(center=project(source_x, source_y, height_z + 20)))
+    for floater in messages:
+        text_surface = font.render(floater.text, True, floater.color)
+        text_surface.set_alpha(int(255 * min(1.0, floater.life / 0.5)))
+        surface.blit(text_surface, text_surface.get_rect(center=project(floater.x, floater.y, floater.height + 20)))
 
 
 def draw_impacts(game, surface):
     if game.font_impact is None:
         game.font_impact = load_font(44, bold=True)
-    for source_x, source_y, text, life_time, color, size_scale, rotation, offset_z in game.impact_messages:
-        progress = 1 - life_time / 0.9
-        pop = size_scale * (1.7 - 0.7 * min(1.0, progress * 6))
-        label = pygame.transform.rotozoom(impact_label(game, text, color), rotation, pop * 0.6)
-        label.set_alpha(int(255 * min(1.0, life_time / 0.3)))
-        surface.blit(label, label.get_rect(center=project(source_x, source_y, 50 + offset_z + progress * 30)))
+    for impact in game.impact_messages:
+        progress = 1 - impact.life / 0.9
+        pop = impact.size * (1.7 - 0.7 * min(1.0, progress * 6))
+        label = pygame.transform.rotozoom(impact_label(game, impact.text, impact.color), impact.rotation, pop * 0.6)
+        label.set_alpha(int(255 * min(1.0, impact.life / 0.3)))
+        surface.blit(label, label.get_rect(center=project(impact.x, impact.y, 50 + impact.offset_z + progress * 30)))
 
 
 def impact_label(game, text, color):
@@ -167,9 +162,9 @@ def impact_label(game, text, color):
 
 def draw_toasts(surface, messages, font):
     y = 64
-    for text, life_time, color in messages:
-        opacity = min(1.0, life_time / 0.4)
-        text_surface = font.render(text, True, color)
+    for toast in messages:
+        opacity = min(1.0, toast.life / 0.4)
+        text_surface = font.render(toast.text, True, toast.color)
         background = pygame.Surface((text_surface.get_width() + 24, text_surface.get_height() + 8), pygame.SRCALPHA)
         background.fill((15, 17, 22, int(200 * opacity)))
         rectangle = background.get_rect(center=(SCREEN_WIDTH / 2, y))
