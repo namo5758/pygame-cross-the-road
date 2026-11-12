@@ -9,6 +9,7 @@ from game_config import (
     BAD_COLOR,
     GOOD_COLOR,
     HEADS_UP_DISPLAY_Y,
+    LEVELS,
     MUTED_COLOR,
     PANEL_2_COLOR,
     PANEL_COLOR,
@@ -21,6 +22,15 @@ from geometry import mix
 from render_people import BURNT_COLOR, health_color
 
 INFO_LEFT = 538
+INFO_RIGHT = SCREEN_WIDTH - 16
+
+
+def render_fit(fonts, text, color, max_width):
+    """ใช้ฟอนต์แรกที่ข้อความกว้างไม่เกิน max_width ถ้าไม่มีเลยใช้ตัวเล็กสุด"""
+    for font in fonts:
+        if font.size(text)[0] <= max_width:
+            break
+    return font.render(text, True, color)
 
 
 def roster_rectangles(people):
@@ -47,7 +57,9 @@ def draw_level_stats(game, surface):
     dead_count = sum(not person.alive for person in game.people)
     target = game.current_level["target"]
     minutes, seconds = divmod(int(game.elapsed_time), 60)
-    surface.blit(game.font_bold.render(game.current_level["name"], True, TEXT_COLOR), (18, top + 12))
+    # ชื่อด่านยาวกว่าช่องก่อนถึงการ์ดคน (x = 250) ย่อฟอนต์ลงให้พอดี
+    level_fonts = (game.font_bold, game.font_regular, game.font_small)
+    surface.blit(render_fit(level_fonts, game.current_level["name"], TEXT_COLOR, 250 - 18 - 8), (18, top + 12))
     surface.blit(game.font_regular.render(f"ข้ามสำเร็จ  {saved_count} / {target}", True, GOOD_COLOR if saved_count >= target else TEXT_COLOR), (18, top + 44))
     surface.blit(game.font_regular.render(f"เสียชีวิต  {dead_count}", True, BAD_COLOR if dead_count else MUTED_COLOR), (18, top + 70))
     surface.blit(game.font_regular.render(f"เวลา  {minutes:02d}:{seconds:02d}", True, MUTED_COLOR), (18, top + 96))
@@ -115,16 +127,20 @@ def draw_person_info(game, surface):
     fraction = max(0.0, person.health / person.maximum_health)
     status = f"HP {int(max(0, person.health))}/{person.maximum_health}  ·  {person_state_text(person)}"
     surface.blit(game.font_small.render(status, True, health_color(fraction)), (left, top + 40))
-    surface.blit(game.font_regular.render(person.information["skill_description"], True, TEXT_COLOR), (left, top + 62))
+    skill = render_fit((game.font_regular, game.font_small), person.information["skill_description"], TEXT_COLOR, INFO_RIGHT - left)
+    surface.blit(skill, (left, top + 62))
     if person.information["cooldown"] > 1 and not person.saved:
         ready = person.cooldown <= 0
-        text = "คลิกขวา = ใช้ความสามารถ (พร้อม)" if ready else f"ใช้ได้อีกใน {person.cooldown:0.1f} วินาที"
-        surface.blit(game.font_small.render(text, True, GOOD_COLOR if ready else MUTED_COLOR), (left + 300, top + 40))
+        text = "คลิกขวา = ใช้ได้เลย" if ready else f"ใช้ได้อีก {person.cooldown:0.1f} วิ"
+        label = game.font_small.render(text, True, GOOD_COLOR if ready else MUTED_COLOR)
+        surface.blit(label, label.get_rect(topright=(INFO_RIGHT, top + 40)))
 
 
 def person_state_text(person):
-    if person.fuel:
-        return "ปลอดภัยแล้ว" if person.saved else "กำลังไฟไหม้!"
+    if person.saved:
+        return "ปลอดภัยแล้ว"
+    if person.burn_time > 0:
+        return "กำลังไฟไหม้!"
     if person.down_time > 0:
         return "ล้มอยู่"
     if person.injured:
@@ -137,9 +153,10 @@ def person_state_text(person):
 def draw_controls_help(game, surface):
     selected_count = sum(person.active for person in game.selected_people)
     lines = ["Shift+คลิก = เลือกกลุ่ม / คลิกซ้ำเอาออก | ปล่อย Shift = เดิน",
-             f"เลือก {selected_count} คน | Esc = ล้าง | G = เดินทุกคน | Space = หยุด | P = พัก | R = ใหม่"]
+             f"เลือก {selected_count} คน | Esc ล้าง | G เดินทุกคน | Space หยุด | P พัก | R ใหม่"]
     for index, line in enumerate(lines):
-        surface.blit(game.font_small.render(line, True, MUTED_COLOR), (INFO_LEFT, HEADS_UP_DISPLAY_Y + 104 + index * 20))
+        label = render_fit((game.font_small, game.font_tiny), line, MUTED_COLOR, INFO_RIGHT - INFO_LEFT)
+        surface.blit(label, (INFO_LEFT, HEADS_UP_DISPLAY_Y + 104 + index * 20))
 
 
 def draw_overlay_card(game, surface):
@@ -207,10 +224,11 @@ def draw_end(game, surface):
         return
     stars = 3 if saved_count == 10 else 2 if saved_count >= 8 else 1
     minutes, seconds = divmod(int(game.elapsed_time), 60)
+    is_last_level = game.level_index == len(LEVELS) - 1
     rectangle = center_card(
         game, surface,
-        ["ผ่านด่าน!", f"รอด {saved_count} / 10 คน   ·   เวลา {minutes:02d}:{seconds:02d}", " "],
-        supporting_lines=["N = ด่านถัดไป      R = เล่นด่านนี้อีกครั้ง"]
+        ["ผ่านครบทุกด่าน!" if is_last_level else "ผ่านด่าน!", f"รอด {saved_count} / 10 คน   ·   เวลา {minutes:02d}:{seconds:02d}", " "],
+        supporting_lines=[("N = กลับไปด่าน 1" if is_last_level else "N = ด่านถัดไป") + "      R = เล่นด่านนี้อีกครั้ง"]
     )
     for index in range(3):
         points = star_points(rectangle.centerx + (index - 1) * 46, rectangle.y + 116)

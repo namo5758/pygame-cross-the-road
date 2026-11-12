@@ -131,10 +131,10 @@ def draw_near_sidewalk(surface):
 
 
 def draw_ground_labels(surface):
-    label_safe = load_font(22, bold=True).render("ฝั่งปลอดภัย  SAFE ZONE", True, (140, 176, 130))
+    label_safe = load_font(22, bold=True).render("ฝั่งปลอดภัย  SAFE ZONE", True, (88, 132, 82))
     surface.blit(label_safe, label_safe.get_rect(center=project(SCREEN_WIDTH / 2, 92)))
-    label_start = load_font(18, bold=True).render("จุดเริ่มต้น", True, (176, 168, 150))
-    surface.blit(label_start, (16, project(0, WORLD_BOTTOM - 22)[1]))
+    label_start = load_font(18, bold=True).render("จุดเริ่มต้น", True, (128, 120, 104))
+    surface.blit(label_start, (16, project(0, WORLD_BOTTOM - 34)[1]))
 
 
 def draw_skid_marks(game):
