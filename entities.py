@@ -1,11 +1,11 @@
-"""Game-world entities and their local behavior.
+"""ข้อมูลของสิ่งต่าง ๆ ในเกม: คน รถ โดรน แอ่ง ไฟ อนุภาค ข้อความ
 
-These classes hold mutable state. Cross-object interactions remain in Game's
-simulation methods so collision and level rules have one owner.
+การชนกันระหว่างของต่างชนิดอยู่ใน simulation.py ที่เดียว
 """
 
 import math
 import random
+from dataclasses import dataclass
 
 from game_config import (
     BLOOD,
@@ -13,17 +13,14 @@ from game_config import (
     CAR_COLORS,
     CROSSING_START_X,
     CROSSING_END_X,
-    ICECREAM_COLORS,
     LANE_DIRECTION,
     LANE_HEIGHT,
     LANE_SPEED,
-    MOTORCYCLE_COLORS,
     PERSON_TYPES,
     ROAD_BOTTOM,
     ROAD_TOP,
     SCREEN_WIDTH,
-    SIDECAR_COLORS,
-    TRUCK_COLORS,
+    VEHICLE_COLORS,
     VEHICLES,
     WORLD_BOTTOM,
 )
@@ -36,20 +33,18 @@ class Person:
         self.kind = kind
         self.index = index
         self.x, self.y = x, y
-        # Waypoints are visited in order; an empty list means there is no walking destination.
         self.path = []
         self.alive = True
         self.saved = False
         self.is_walking = False
-        # Countdown values use seconds. The simulation subtracts delta_time until an effect expires.
-        # เวลาคงเหลือใช้หน่วยวินาที และลดลงตามเวลาที่ผ่านไปในแต่ละเฟรม
+        # ตัวนับถอยหลังทั้งหมดเป็นวินาที
         self.cooldown = 0.0
         self.dash = 0.0
         self.tired = 0.0
         self.slip_time = 0.0
         self.slip_velocity = (0.0, 0.0)
         self.slip_immune = 0.0
-        # Carrying links work both ways: the carrier points to the passenger, and the passenger to the carrier.
+        # ลิงก์สองทาง: คนอุ้มชี้ไปที่คนถูกอุ้ม และกลับกัน
         self.carrying = None
         self.carried_by = None
         self.fuel = False
@@ -58,19 +53,19 @@ class Person:
         self.wander_direction = (0.0, 0.0)
         self.wander_time = 0.0
         self.sign_time = 0.0
-        # Random starting phases stop every character from swinging their legs in perfect synchronization.
+        # สุ่มจังหวะเริ่ม ขาจะได้ไม่แกว่งพร้อมกันทุกคน
         self.walk_phase = random.random() * 10
         self.moving = False
         self.facing = 1
-        # health & animation state
+        # HP และท่าทาง
         self.maximum_health = PERSON_TYPES[kind]["health"]
         self.health = float(self.maximum_health)
-        self.hurt_time = 0.0            # red flash after taking damage
-        self.invulnerable_time = 0.0    # short grace period after a car hit
-        self.down_time = 0.0            # knocked down, can't move
-        self.burn_time = 0.0            # on fire
-        self.charring_level = 0.0           # 0..1 how burnt the body looks
-        self.pose = 0.0                 # 0 = standing, pi/2 = lying flat
+        self.hurt_time = 0.0  # กะพริบแดงหลังโดนตี
+        self.invulnerable_time = 0.0  # อมตะชั่วคราวหลังโดนรถ
+        self.down_time = 0.0  # ล้มอยู่ ขยับไม่ได้
+        self.burn_time = 0.0  # ติดไฟ
+        self.charring_level = 0.0  # 0..1 ตัวไหม้แค่ไหน
+        self.pose = 0.0  # 0 = ยืน, π/2 = นอน
         self.fall_direction = 1
         self.death_time = 0.0
         self.death_cause = None
@@ -81,26 +76,24 @@ class Person:
         return PERSON_TYPES[self.kind]
 
     @property
-    # Only living, unsaved people who are not being carried can respond independently.
+    # ยังสั่งได้: มีชีวิต ยังไม่ถึง และไม่ได้ถูกอุ้ม
     def active(self):
         return self.alive and not self.saved and self.carried_by is None
 
     @property
-    # Severe injury means remaining health is below 40% of starting health.
+    # บาดเจ็บหนัก = HP ต่ำกว่า 40%
     def injured(self):
         return self.health < self.maximum_health * 0.4
 
     def speed(self):
         if self.down_time > 0:
             return 0.0
-        # Start with the character speed, then multiply by injury, fire, sprint, fatigue, and carrying effects.
-        # Multipliers combine: for example, injury and carrying give base_speed * 0.6 * 0.8.
-        # ตัวคูณมีผลต่อเนื่องกัน เช่น บาดเจ็บและอุ้มคนจะเหลือความเร็ว 0.6 × 0.8 = 48% ของปกติ
+        # ตัวคูณซ้อนกันได้ เช่น บาดเจ็บ + อุ้มคน = 0.6 × 0.8
         current_speed = self.information["speed"]
         if self.injured:
             current_speed *= 0.6
         if self.burn_time > 0:
-            current_speed *= 1.25            # running while on fire
+            current_speed *= 1.25  # ติดไฟแล้ววิ่ง
         if self.dash > 0:
             current_speed *= 2.2
         elif self.tired > 0:
@@ -110,13 +103,13 @@ class Person:
         return current_speed
 
     def set_target(self, target_x, target_y):
-        """Plan waypoints so people only cross the road on the zebra crossing."""
+        """วางจุดเดินให้ข้ามถนนเฉพาะในทางม้าลาย"""
         target_y = clamp(target_y, 16, WORLD_BOTTOM - 10)
         target_x = clamp(target_x, 12, SCREEN_WIDTH - 12)
         if in_road(target_y):
             target_x = clamp(target_x, CROSSING_START_X + 8, CROSSING_END_X - 8)
         waypoints = []
-        # Classify start and destination by curb position so the route can include crossing-entry waypoints.
+        # ต้นทางหรือปลายทางอยู่นอกถนน ต้องเดินไปเข้าทางม้าลายก่อน
         start_side = "near" if self.y >= ROAD_BOTTOM else "far" if self.y <= ROAD_TOP else "road"
         destination_side = "near" if target_y >= ROAD_BOTTOM else "far" if target_y <= ROAD_TOP else "road"
         if start_side != destination_side:
@@ -141,58 +134,43 @@ class Car:
         self.width = vehicle_specification["width"]
         self.height = vehicle_specification["height"]
         speed_multiplier = vehicle_specification["speed"]
-        self.color = random.choice({
-            "truck": TRUCK_COLORS,
-            "moto": MOTORCYCLE_COLORS,
-            "sidecar": SIDECAR_COLORS,
-            "icecream": ICECREAM_COLORS,
-            "tanker": [(230, 232, 228)],
-        }.get(kind, CAR_COLORS))
-        self.cargo = random.choice(["passenger", "crates", "bottles"])   # what's in the sidecar
-        self.fuse = 0.0          # tanker: seconds until it blows up after a crash
+        self.color = random.choice(VEHICLE_COLORS.get(kind, CAR_COLORS))
+        self.cargo = random.choice(["passenger", "crates", "bottles"])  # ของในพ่วงข้าง
+        self.fuse = 0.0  # รถน้ำมัน: วินาทีก่อนระเบิด
         self.burnt = False
-        self.skid_points = None  # last wheel positions, for skid marks
-        # Actual speed = lane speed * level multiplier * vehicle multiplier * random variation of +/-10%.
-        # ความเร็วจริงมาจากความเร็วเลน คูณความยาก คูณประเภทรถ แล้วสุ่มให้ต่างกันเล็กน้อย
+        self.skid_points = None  # ตำแหน่งล้อเฟรมก่อน ใช้ต่อรอยเบรก
+        # ความเร็ว = ความเร็วเลน × ความยาก × ชนิดรถ ± 10%
         self.base_speed = LANE_SPEED[lane] * level_settings["speed"] * speed_multiplier * random.uniform(0.9, 1.1)
         self.speed = self.base_speed
-        # Spawn beyond the incoming screen edge so the vehicle enters smoothly.
+        # เกิดนอกจอฝั่งที่รถวิ่งเข้ามา
         self.x = -self.length if self.direction > 0 else SCREEN_WIDTH + self.length
         self.y = lane_center(lane)
         self.base_angle = 0.0 if self.direction > 0 else math.pi
-        self.heading = self.base_angle
+        self.angle = self.base_angle
         self.lateral_speed = 0.0
-        self.skid = 0.0          # sliding on blood
-        self.stall = 0.0         # braking after hitting someone
-        self.wreck = False       # crashed, blocking the road
-        self.wreck_time = 0.0
-        self.towed = False       # hooked by a drone
-        self.lift = 0.0          # height while being carried away
+        self.skid = 0.0  # ไถลบนเลือด
+        self.stall = 0.0  # เบรกหลังชนคน
+        self.wreck = False  # เป็นซาก ขวางถนน
+        self.towed = False  # ถูกโดรนเกี่ยว
+        self.lift = 0.0  # ความสูงตอนถูกยก
         self.rider_color = random.choice([(200, 60, 50), (50, 120, 200), (230, 200, 60)])
 
-    @property
-    def angle(self):
-        return self.heading
-
     def blocks(self, lane_index):
-        """A wreck blocks every lane it overlaps; a moving car only its own lane."""
+        """ซากรถขวางทุกเลนที่ทับอยู่ รถที่วิ่งปกติขวางแค่เลนตัวเอง"""
         if not self.wreck:
             return self.lane == lane_index
-        # Overlap occurs when center separation is smaller than the sum of half-widths, with a small margin.
         return abs(lane_center(lane_index) - self.y) < self.width / 2 + LANE_HEIGHT / 2 - 6
 
-    # Use the nearest ground corner for drawing order so a car can cover objects behind it.
+    # ใช้มุมที่อยู่ล่างสุดเป็นความลึก รถยาวที่เอียงจะได้ทับของข้างหลังถูก
     def depth(self):
         return max(corner[1] for corner in box_corners(self.x, self.y, self.length, self.width, self.angle))
 
-    # Stationary wrecks and towed cars cannot hit people; moving or sliding cars can.
+    # ซากกับรถที่ถูกยกชนคนไม่ได้
     def dangerous(self):
         return not self.wreck and not self.towed and (self.speed > 25 or self.skid > 0)
 
     def hits(self, person_x, person_y, radius=8):
-        # Rotate the person by the negative car angle to express their position in the car frame.
-        # Collision then becomes two simple bounds checks against a rectangle expanded by the person radius.
-        # หมุนตำแหน่งคนกลับให้ตรงกับแนวรถก่อน จึงตรวจได้ง่ายว่าคนอยู่ในกรอบรถหรือไม่
+        # หมุนตำแหน่งคนกลับเข้าแกนของรถ แล้วเช็กแค่กรอบสี่เหลี่ยม
         cosine_angle, sine_angle = math.cos(-self.angle), math.sin(-self.angle)
         delta_x = person_x - self.x
         delta_y = person_y - self.y
@@ -202,10 +180,10 @@ class Car:
 
 
 class Drone:
-    """Tow drone: flies in, hooks a wrecked car, lifts it and flies away."""
+    """โดรนยกซาก: บินเข้า → หย่อนสาย → ยก → บินออก"""
     def __init__(self, car):
         self.car = car
-        # Choose the nearer horizontal exit and start the tow drone outside the upper part of the scene.
+        # เข้าจากฝั่งที่ใกล้กว่า เริ่มนอกจอด้านบน
         exit_side = -1 if car.x < SCREEN_WIDTH / 2 else 1
         self.x = car.x + exit_side * 420
         self.y = -60.0
@@ -219,17 +197,12 @@ class Drone:
     def update(self, delta_time):
         target_car = self.car
         self.time_elapsed += delta_time
-        # Tow sequence: approach the car, lower the cable, lift the car, then carry it off-screen.
-        # โดรนทำงานเป็นสถานะตามลำดับ: บินเข้า → เกี่ยวรถ → ยกรถ → บินออก
         if self.state == "fly":
             delta_x = target_car.x - self.x
             delta_y = target_car.y - self.y
             distance = math.hypot(delta_x, delta_y)
-            # Distance this frame = speed * elapsed seconds. Normalize the target vector to obtain direction.
             step = 380 * delta_time
-            # Ease toward the target height: add a fraction of the remaining difference each frame.
-            # The fraction is capped at 1 to avoid overshooting on a long frame.
-            # ค่อย ๆ ขยับเข้าหาเป้าหมายตามสัดส่วนของระยะที่เหลือ จึงเคลื่อนนุ่มขึ้นโดยไม่เลยเป้า
+            # ค่อย ๆ ปรับความสูงเข้าหา 120 (สัดส่วนไม่เกิน 1 จะได้ไม่เลย)
             self.z += (120 - self.z) * min(1.0, 2 * delta_time)
             if distance <= step:
                 self.x, self.y = target_car.x, target_car.y
@@ -239,15 +212,14 @@ class Drone:
                 self.x += delta_x / distance * step
                 self.y += delta_y / distance * step
         elif self.state == "hook":
-            # Progress = elapsed / duration, capped at 1; this extends the cable fully over 0.6 seconds.
+            # หย่อนสายจนสุดใน 0.6 วิ
             self.cable_extension = min(1.0, self.time_elapsed / 0.6)
             if self.time_elapsed > 0.7:
-                target_car.towed = True              # no longer blocks traffic
+                target_car.towed = True  # ไม่ขวางถนนแล้ว
                 self.state = "lift"
                 self.time_elapsed = 0.0
         elif self.state == "lift":
-            # Interpolate lift height over 0.8 seconds: progress 0 is the start and 1 is fully lifted.
-            # ความคืบหน้า = เวลาที่ผ่านไป / เวลาทั้งหมด เมื่อได้ 1 แปลว่ายกเสร็จแล้ว
+            # ยกขึ้น 70 ใน 0.8 วิ
             lift_progress = min(1.0, self.time_elapsed / 0.8)
             target_car.lift = 70 * lift_progress
             self.z = 120 + 40 * lift_progress
@@ -258,7 +230,7 @@ class Drone:
             delta_x = self.exit_x - self.x
             delta_y = -120 - self.y
             distance = math.hypot(delta_x, delta_y) or 1
-            # Accelerate from 80 world units/second, adding 300 per second, with a maximum speed of 320.
+            # เร่งจาก 80 ขึ้น 300 ต่อวินาที สูงสุด 320
             fly_speed = min(320, 80 + self.time_elapsed * 300)
             self.x += delta_x / distance * fly_speed * delta_time
             self.y += delta_y / distance * fly_speed * delta_time
@@ -274,9 +246,9 @@ class Puddle:
         self.x, self.y, self.radius = x, y, radius
         self.color, self.highlight_color = color, highlight_color
         self.life = 10.0
-        # Track cars already affected by this puddle so the same puddle does not repeatedly trigger one car.
-        self.hit_car_identifiers = set()
-        # Overlap several randomly offset circles to make an irregular puddle instead of a perfect circle.
+        # รถที่เหยียบแอ่งนี้ไปแล้ว ลื่นได้ครั้งเดียวต่อแอ่ง
+        self.hit_cars = set()
+        # วงกลมหลายวงซ้อนกัน แอ่งจะได้ไม่กลมเป๊ะ
         self.blobs = [
             (random.uniform(-radius * 0.5, radius * 0.5),
              random.uniform(-radius * 0.4, radius * 0.4),
@@ -293,17 +265,48 @@ class Fire:
 
 
 class Particle:
-    def __init__(self, x, y, z, velocity_x, velocity_y, velocity_z, color, size, life, gravity=500, shape="dot"):
+    def __init__(self, x, y, z, color, size, life, velocity_x=0.0, velocity_y=0.0, velocity_z=0.0, gravity=500, shape="dot"):
         self.x, self.y, self.z = x, y, z
         self.velocity_x = velocity_x
         self.velocity_y = velocity_y
         self.velocity_z = velocity_z
         self.color, self.size = color, size
-        # Keep both remaining and initial lifetime so rendering can compute a fade fraction.
+        # เก็บอายุตอนเริ่มไว้ ใช้คำนวณความจางตอนวาด
         self.life = self.maximum_life = life
-        # Vertical acceleration: positive gravity pulls particles down; negative gravity makes smoke or flames rise.
-        # แรงโน้มถ่วงบวกดึงเศษวัตถุลง ส่วนค่าลบทำให้ควันหรือเปลวไฟลอยขึ้น
+        # gravity บวก = ตก, ลบ = ลอยขึ้น (ควัน เปลวไฟ)
         self.gravity = gravity
-        self.shape = shape                  # "dot", "chunk" (car part) or "wheel"
+        self.shape = shape  # "dot", "chunk" (ชิ้นส่วนรถ) หรือ "wheel"
         self.angle = random.uniform(0, math.tau)
         self.spin = random.uniform(-12, 12)
+
+
+@dataclass
+class FloatingText:
+    """ข้อความเล็กที่ลอยขึ้นจากจุดในโลก เช่น ลื่น! หรือ -12"""
+    x: float
+    y: float
+    height: float
+    text: str
+    life: float
+    color: tuple
+
+
+@dataclass
+class Toast:
+    """ข้อความแจ้งเตือนกลางจอด้านบน"""
+    text: str
+    life: float
+    color: tuple
+
+
+@dataclass
+class ImpactText:
+    """คำใหญ่ตอนชน เช่น โครม!"""
+    x: float
+    y: float
+    text: str
+    life: float
+    color: tuple
+    size: float
+    rotation: float
+    offset_z: float
