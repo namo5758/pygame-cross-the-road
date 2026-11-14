@@ -123,10 +123,8 @@ def draw_person_info(game, surface):
 
 
 def person_state_text(person):
-    if person.saved:
-        return "ปลอดภัยแล้ว"
-    if person.burn_time > 0:
-        return "กำลังไฟไหม้!"
+    if person.fuel:
+        return "ปลอดภัยแล้ว" if person.saved else "กำลังไฟไหม้!"
     if person.down_time > 0:
         return "ล้มอยู่"
     if person.injured:
